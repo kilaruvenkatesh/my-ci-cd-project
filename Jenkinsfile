@@ -8,9 +8,17 @@ pipeline {
 
     options {
         timestamps()
+        skipDefaultCheckout()
     }
 
     stages {
+
+        stage('Clean Workspace') {
+            steps {
+                echo "Cleaning Jenkins workspace..."
+                deleteDir()
+            }
+        }
 
         stage('Checkout Source Code') {
             steps {
