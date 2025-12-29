@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  backend:
+    image: kilaruvenkatesh/my-ci-cd-backend:latest
+    container_name: backend-staging
+    environment:
+      - ENV=staging
+      - DB_HOST=db
+      - DB_NAME=stagingdb
+      - DB_USER=admin
+      - DB_PASSWORD=admin
+    ports:
+      - "6000:5000"
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  frontend:
+    image: kilaruvenkatesh/my-ci-cd-frontend:latest
+    container_name: frontend-staging
+    ports:
+      - "4000:80"
+    networks:
+      - app-network
+
+  db:
+    image: postgres:15
+    container_name: db-staging
+    environment:
+      POSTGRES_DB: stagingdb
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    volumes:
+      - staging-db-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+
+volumes:
+  staging-db-data:

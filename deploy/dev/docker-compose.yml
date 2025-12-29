@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  backend:
+    image: kilaruvenkatesh/my-ci-cd-backend:latest
+    container_name: backend-dev
+    environment:
+      - ENV=development
+      - DB_HOST=db
+      - DB_NAME=mydb
+      - DB_USER=admin
+      - DB_PASSWORD=admin
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  frontend:
+    image: kilaruvenkatesh/my-ci-cd-frontend:latest
+    container_name: frontend-dev
+    ports:
+      - "3000:80"
+    networks:
+      - app-network
+
+  db:
+    image: postgres:15
+    container_name: db-dev
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    volumes:
+      - dev-db-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+networks:
+  app-network:
+
+volumes:
+  dev-db-data:

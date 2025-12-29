@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  backend:
+    image: kilaruvenkatesh/my-ci-cd-backend:latest
+    container_name: backend-prod
+    environment:
+      - ENV=production
+      - DB_HOST=db
+      - DB_NAME=proddb
+      - DB_USER=admin
+      - DB_PASSWORD=admin
+    ports:
+      - "7000:5000"
+    depends_on:
+      - db
+    networks:
+      - app-network
+    restart: always
+
+  frontend:
+    image: kilaruvenkatesh/my-ci-cd-frontend:latest
+    container_name: frontend-prod
+    ports:
+      - "80:80"
+    networks:
+      - app-network
+    restart: always
+
+  db:
+    image: postgres:15
+    container_name: db-prod
+    environment:
+      POSTGRES_DB: proddb
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    volumes:
+      - prod-db-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    restart: always
+
+networks:
+  app-network:
+
+volumes:
+  prod-db-data:

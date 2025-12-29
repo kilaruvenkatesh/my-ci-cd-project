@@ -7,7 +7,7 @@ CORS(app)  # VERY IMPORTANT
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "healthy"}), 200
+    return {"status": "UP"}, 200
 
 @app.route("/ready")
 def ready():

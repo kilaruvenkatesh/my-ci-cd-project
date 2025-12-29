@@ -22,3 +22,5 @@ COPY . .
 EXPOSE 5000
 
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+  CMD curl -f http://localhost:5000/health || exit 1
