@@ -7,8 +7,9 @@ pipeline {
         BACKEND_IMAGE  = "my-ci-cd-backend"
         FRONTEND_IMAGE = "my-ci-cd-frontend"
 
-        // Change this to dev / staging / prod when needed
         DEPLOY_ENV = "prod"
+
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -19,14 +20,13 @@ pipeline {
 
         stage('Clean Workspace') {
             steps {
-                echo ' Cleaning Jenkins workspace...'
+                echo 'Cleaning Jenkins workspace...'
                 deleteDir()
             }
         }
 
         stage('Checkout Source Code') {
             steps {
-                echo ' Checking out source code...'
                 checkout scm
             }
         }
@@ -35,17 +35,12 @@ pipeline {
            BUILD IMAGES
         ========================== */
 
-        stage('Build Backend Image') {
+        stage('Build Images') {
             steps {
-                echo ' Building Backend Docker Image...'
-                sh 'docker build -t $BACKEND_IMAGE:latest ./backend'
-            }
-        }
-
-        stage('Build Frontend Image') {
-            steps {
-                echo ' Building Frontend Docker Image...'
-                sh 'docker build -t $FRONTEND_IMAGE:latest frontend/myapp'
+                sh '''
+                  docker build -t $BACKEND_IMAGE:$IMAGE_TAG ./backend
+                  docker build -t $FRONTEND_IMAGE:$IMAGE_TAG frontend/myapp
+                '''
             }
         }
 
@@ -55,15 +50,12 @@ pipeline {
 
         stage('Docker Hub Login') {
             steps {
-                echo ' Logging into Docker Hub...'
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    '''
+                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
                 }
             }
         }
@@ -72,38 +64,29 @@ pipeline {
            TAG & PUSH
         ========================== */
 
-        stage('Tag Images') {
+        stage('Push Images') {
             steps {
-                echo ' Tagging Docker images...'
                 sh '''
-                    docker tag $BACKEND_IMAGE:latest  $DOCKERHUB_USER/$BACKEND_IMAGE:latest
-                    docker tag $FRONTEND_IMAGE:latest $DOCKERHUB_USER/$FRONTEND_IMAGE:latest
-                '''
-            }
-        }
+                  docker tag $BACKEND_IMAGE:$IMAGE_TAG  $DOCKERHUB_USER/$BACKEND_IMAGE:$IMAGE_TAG
+                  docker tag $FRONTEND_IMAGE:$IMAGE_TAG $DOCKERHUB_USER/$FRONTEND_IMAGE:$IMAGE_TAG
 
-        stage('Push Images to Docker Hub') {
-            steps {
-                echo ' Pushing images to Docker Hub...'
-                sh '''
-                    docker push $DOCKERHUB_USER/$BACKEND_IMAGE:latest
-                    docker push $DOCKERHUB_USER/$FRONTEND_IMAGE:latest
+                  docker push $DOCKERHUB_USER/$BACKEND_IMAGE:$IMAGE_TAG
+                  docker push $DOCKERHUB_USER/$FRONTEND_IMAGE:$IMAGE_TAG
                 '''
             }
         }
 
         /* =========================
-           DEPLOY (DEV / STAGING / PROD)
+           DEPLOY
         ========================== */
 
         stage('Deploy Application') {
             steps {
-                echo " Deploying to ${DEPLOY_ENV} environment..."
                 sh '''
-                    cd deploy/$DEPLOY_ENV
-                    docker compose down
-                    docker compose pull
-                    docker compose up -d
+                  export IMAGE_TAG=$IMAGE_TAG
+                  cd deploy/$DEPLOY_ENV
+                  docker compose down
+                  docker compose up -d
                 '''
             }
         }
@@ -114,21 +97,32 @@ pipeline {
 
         stage('Health Check') {
             steps {
-                echo ' Performing health check...'
                 sh '''
-                    sleep 10
-                    curl -f http://localhost:7000/health
+                  sleep 10
+                  curl -f http://localhost:7000/health
                 '''
             }
         }
     }
 
     post {
+
         success {
-            echo ' CI/CD pipeline completed successfully!'
+            echo "Deployment SUCCESS with version ${IMAGE_TAG}"
         }
+
         failure {
-            echo ' CI/CD pipeline failed!'
+            echo "Deployment FAILED — Rolling back!"
+
+            sh '''
+              PREVIOUS_TAG=$((IMAGE_TAG - 1)) || exit 0
+
+              export IMAGE_TAG=$PREVIOUS_TAG
+              cd deploy/$DEPLOY_ENV
+
+              docker compose down
+              docker compose up -d
+            '''
         }
     }
 }
