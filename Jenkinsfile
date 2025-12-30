@@ -51,19 +51,21 @@ pipeline {
         ========================== */
         stage('Docker Hub Login') {
             steps {
-                echo " Logging into Docker Hub"
+                echo "Logging into Docker Hub"
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+                    sh '''
+                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    '''
                 }
             }
         }
 
         /* =========================
-           TAG & PUSH IMAGES
+           TAG & PUSH
         ========================== */
         stage('Push Images to Docker Hub') {
             steps {
@@ -79,7 +81,7 @@ pipeline {
         }
 
         /* =========================
-           MANUAL APPROVAL (PROD)
+           MANUAL APPROVAL
         ========================== */
         stage('Approve Production Deploy') {
             steps {
@@ -89,7 +91,7 @@ pipeline {
         }
 
         /* =========================
-           DEPLOY APPLICATION
+           DEPLOY
         ========================== */
         stage('Deploy Application') {
             steps {
@@ -106,14 +108,19 @@ pipeline {
         }
 
         /* =========================
-           HEALTH CHECK
+           HEALTH CHECK (CORRECT)
         ========================== */
         stage('Health Check') {
             steps {
                 echo " Performing health check"
                 sh '''
-                  sleep 15
-                  curl -f http://localhost:7000/health
+                  for i in {1..10}; do
+                    docker run --rm --network prod_app-network curlimages/curl \
+                      curl -f http://backend-prod:5000/health && exit 0
+                    echo "Waiting for backend..."
+                    sleep 5
+                  done
+                  exit 1
                 '''
             }
         }
