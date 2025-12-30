@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  backend:
+    image: kilaruvenkatesh/my-ci-cd-backend:${IMAGE_TAG}
+    container_name: backend-green
+    ports:
+      - "7001:5000"
+    networks:
+      - app-network
+
+  frontend:
+    image: kilaruvenkatesh/my-ci-cd-frontend:${IMAGE_TAG}
+    container_name: frontend-green
+    ports:
+      - "81:80"
+    networks:
+      - app-network
+
+networks:
+  app-network:

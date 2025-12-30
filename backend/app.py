@@ -5,7 +5,7 @@ import os
 app = Flask(__name__)
 CORS(app)  # VERY IMPORTANT
 
-@app.route("/health")
+@app.route("/health", methods=["GET"])
 def health():
     return {"status": "UP"}, 200
 

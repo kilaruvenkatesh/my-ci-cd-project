@@ -2,13 +2,15 @@ pipeline {
     agent any
 
     environment {
+        // Docker Hub
         DOCKERHUB_USER = "kilaruvenkatesh"
-
         BACKEND_IMAGE  = "my-ci-cd-backend"
         FRONTEND_IMAGE = "my-ci-cd-frontend"
 
+        // Environment (dev / staging / prod)
         DEPLOY_ENV = "prod"
 
+        // Versioning
         IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
@@ -17,16 +19,16 @@ pipeline {
         /* =========================
            CLEAN & CHECKOUT
         ========================== */
-
         stage('Clean Workspace') {
             steps {
-                echo 'Cleaning Jenkins workspace...'
+                echo " Cleaning workspace"
                 deleteDir()
             }
         }
 
         stage('Checkout Source Code') {
             steps {
+                echo " Checking out source code"
                 checkout scm
             }
         }
@@ -34,9 +36,9 @@ pipeline {
         /* =========================
            BUILD IMAGES
         ========================== */
-
-        stage('Build Images') {
+        stage('Build Docker Images') {
             steps {
+                echo " Building Docker images"
                 sh '''
                   docker build -t $BACKEND_IMAGE:$IMAGE_TAG ./backend
                   docker build -t $FRONTEND_IMAGE:$IMAGE_TAG frontend/myapp
@@ -47,9 +49,9 @@ pipeline {
         /* =========================
            DOCKER HUB LOGIN
         ========================== */
-
         stage('Docker Hub Login') {
             steps {
+                echo " Logging into Docker Hub"
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
                     usernameVariable: 'DOCKER_USER',
@@ -61,11 +63,11 @@ pipeline {
         }
 
         /* =========================
-           TAG & PUSH
+           TAG & PUSH IMAGES
         ========================== */
-
-        stage('Push Images') {
+        stage('Push Images to Docker Hub') {
             steps {
+                echo " Pushing images to Docker Hub"
                 sh '''
                   docker tag $BACKEND_IMAGE:$IMAGE_TAG  $DOCKERHUB_USER/$BACKEND_IMAGE:$IMAGE_TAG
                   docker tag $FRONTEND_IMAGE:$IMAGE_TAG $DOCKERHUB_USER/$FRONTEND_IMAGE:$IMAGE_TAG
@@ -77,16 +79,28 @@ pipeline {
         }
 
         /* =========================
-           DEPLOY
+           MANUAL APPROVAL (PROD)
         ========================== */
+        stage('Approve Production Deploy') {
+            steps {
+                input message: " Approve deployment to PRODUCTION?",
+                      ok: "Deploy"
+            }
+        }
 
+        /* =========================
+           DEPLOY APPLICATION
+        ========================== */
         stage('Deploy Application') {
             steps {
+                echo " Deploying to ${DEPLOY_ENV}"
                 sh '''
                   export IMAGE_TAG=$IMAGE_TAG
                   cd deploy/$DEPLOY_ENV
-                  docker compose down
-                  docker compose up -d
+
+                  docker-compose down
+                  docker-compose pull
+                  docker-compose up -d
                 '''
             }
         }
@@ -94,34 +108,46 @@ pipeline {
         /* =========================
            HEALTH CHECK
         ========================== */
-
         stage('Health Check') {
             steps {
+                echo " Performing health check"
                 sh '''
-                  sleep 10
+                  sleep 15
                   curl -f http://localhost:7000/health
                 '''
             }
         }
     }
 
+    /* =========================
+       POST ACTIONS (ROLLBACK)
+    ========================== */
     post {
 
         success {
-            echo "Deployment SUCCESS with version ${IMAGE_TAG}"
+            echo " Deployment SUCCESS — Version ${IMAGE_TAG}"
+            sh '''
+              echo $IMAGE_TAG > deploy/prod/last_successful_tag.txt
+            '''
         }
 
         failure {
-            echo "Deployment FAILED — Rolling back!"
+            echo " Deployment FAILED — Rolling back!"
 
             sh '''
-              PREVIOUS_TAG=$((IMAGE_TAG - 1)) || exit 0
+              if [ -f deploy/prod/last_successful_tag.txt ]; then
+                ROLLBACK_TAG=$(cat deploy/prod/last_successful_tag.txt)
+                echo " Rolling back to version $ROLLBACK_TAG"
 
-              export IMAGE_TAG=$PREVIOUS_TAG
-              cd deploy/$DEPLOY_ENV
+                export IMAGE_TAG=$ROLLBACK_TAG
+                cd deploy/prod
 
-              docker compose down
-              docker compose up -d
+                docker-compose down
+                docker-compose pull
+                docker-compose up -d
+              else
+                echo " No rollback version found"
+              fi
             '''
         }
     }
